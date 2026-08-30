@@ -30,6 +30,7 @@ export function ParticipantRow({
   isOwner = false,
   isAdmin = false,
   isApp = false,
+  isRoomMuted = false,
 }: {
   name: string;
   isSelf?: boolean;
@@ -74,8 +75,9 @@ export function ParticipantRow({
   // thing. False for anyone on the web, and for a peer sent by a server that
   // predates the field.
   isApp?: boolean;
+  isRoomMuted?: boolean;
 }) {
-  const speaking = useSpeaking(micOn ? micStream : null);
+  const speaking = useSpeaking(micOn && !isRoomMuted ? micStream : null);
   // Whether the screen/camera split is actually known for this peer — see
   // the `screen`/`camera` props.
   const knowsChannels = screen != null || camera != null;
@@ -138,7 +140,13 @@ export function ParticipantRow({
         {isSelf && <span className="shrink-0 text-xs font-normal text-zinc-500">(você)</span>}
       </span>
       <span className="flex shrink-0 items-center gap-2 text-zinc-400 dark:text-zinc-500">
-        {micOn ? (
+        {isRoomMuted ? (
+          <Tooltip content={`${name} foi silenciado pela administração`}>
+            <span className="flex shrink-0 items-center text-red-500 dark:text-red-400">
+              <MicOffIcon className="h-4 w-4" />
+            </span>
+          </Tooltip>
+        ) : micOn ? (
           <MicIcon className="h-4 w-4 text-sky-500" />
         ) : (
           <MicOffIcon className="h-4 w-4 text-zinc-400 dark:text-zinc-600" />

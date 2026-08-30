@@ -165,6 +165,38 @@ export function parseRoomLocation(raw: unknown): RoomLocation | null {
   return { lat, lng };
 }
 
+export type RoomBannedMember = {
+  id: string;
+  name: string;
+  bannedAt: number;
+  bannedBy?: string;
+  reason?: string;
+};
+
+function parseRoomBannedMembers(raw: unknown): RoomBannedMember[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (entry): entry is RoomBannedMember =>
+        Boolean(entry) && typeof entry === "object" && typeof (entry as RoomBannedMember).id === "string"
+    )
+    .map((entry) => ({
+      id: entry.id,
+      name: typeof entry.name === "string" ? entry.name : "Participante",
+      bannedAt:
+        typeof entry.bannedAt === "number" && Number.isFinite(entry.bannedAt)
+          ? entry.bannedAt
+          : Date.now(),
+      bannedBy: typeof entry.bannedBy === "string" ? entry.bannedBy : undefined,
+      reason: typeof entry.reason === "string" ? entry.reason : undefined,
+    }));
+}
+
+function parseRoomMutedMembers(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry): entry is string => typeof entry === "string" && Boolean(entry));
+}
+
 function parseRoomAdmins(raw: unknown): RoomAdmin[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -310,6 +342,8 @@ export type SignalingState = {
   // has already been offered everything a new room gets offered. Read once,
   // on arrival, by WatchRoom's "you just created a public room" popup.
   roomCreated: boolean;
+  roomBannedMembers: RoomBannedMember[];
+  roomMutedMembers: string[];
   // Where this room sits on the public room map — null until an owner/admin
   // places it. Kept here rather than fetched, so the "Definir local do
   // mundo" view opens on the pin that's already there.
@@ -382,6 +416,8 @@ const initialState: SignalingState = {
   roomOwnerId: null,
   roomAdmins: [],
   roomPermissions: { ...DEFAULT_ROOM_PERMISSIONS },
+  roomBannedMembers: [],
+  roomMutedMembers: [],
   roomLocation: null,
   roomDescription: "",
   roomCategory: null,
@@ -772,6 +808,8 @@ class SignalingClient {
           roomOwnerId: typeof msg.ownerId === "string" ? msg.ownerId : null,
           roomAdmins: parseRoomAdmins(msg.admins),
           roomPermissions: parseRoomPermissions(msg.permissions),
+          roomBannedMembers: parseRoomBannedMembers(msg.bannedMembers),
+          roomMutedMembers: parseRoomMutedMembers(msg.mutedMembers),
           roomLocation: parseRoomLocation(msg.location),
           roomDescription: typeof msg.description === "string" ? msg.description : "",
           roomCategory: typeof msg.category === "string" ? msg.category : null,
@@ -871,10 +909,38 @@ class SignalingClient {
           roomOwnerId: typeof msg.ownerId === "string" ? msg.ownerId : this.state.roomOwnerId,
           roomAdmins: parseRoomAdmins(msg.admins),
           roomPermissions: parseRoomPermissions(msg.permissions),
+          roomBannedMembers: parseRoomBannedMembers(msg.bannedMembers),
+          roomMutedMembers: parseRoomMutedMembers(msg.mutedMembers),
           roomLocation: parseRoomLocation(msg.location),
           roomDescription: typeof msg.description === "string" ? msg.description : "",
           roomCategory: typeof msg.category === "string" ? msg.category : null,
         });
+        break;
+      case "room-kicked":
+        this.desiredRoom = null;
+        this.leaveRoom();
+        this.setState({
+          joinError: (msg.message as string) ?? "Você foi expulso da sala pela administração.",
+        });
+        break;
+      case "room-banned":
+        this.desiredRoom = null;
+        this.leaveRoom();
+        this.setState({
+          joinError: (msg.message as string) ?? "Você foi banido desta sala pela administração.",
+        });
+        break;
+      case "room-member-muted":
+        if (Boolean(msg.muted)) {
+          this.setMic(false);
+          this.setState({
+            permissionDenied: {
+              permission: "mic",
+              message: (msg.message as string) ?? "Você foi silenciado nesta sala pela administração.",
+            },
+            permissionDeniedSeq: this.state.permissionDeniedSeq + 1,
+          });
+        }
         break;
       // An action this room doesn't allow us. The server already refused it;
       // this exists so the client can undo whatever it optimistically started
@@ -1211,6 +1277,8 @@ class SignalingClient {
       roomOwnerId: null,
       roomAdmins: [],
       roomPermissions: { ...DEFAULT_ROOM_PERMISSIONS },
+      roomBannedMembers: [],
+      roomMutedMembers: [],
       roomLocation: null,
       roomDescription: "",
       roomCategory: null,
@@ -1240,6 +1308,22 @@ class SignalingClient {
 
   removeRoomAdmin(userId: string) {
     this.rawSend({ type: "room-admin-remove", userId });
+  }
+
+  kickRoomMember(userId: string) {
+    this.rawSend({ type: "room-kick", userId });
+  }
+
+  banRoomMember(userId: string, name?: string, reason?: string) {
+    this.rawSend({ type: "room-ban", userId, name, reason });
+  }
+
+  unbanRoomMember(userId: string) {
+    this.rawSend({ type: "room-unban", userId });
+  }
+
+  setRoomMemberMute(userId: string, muted: boolean) {
+    this.rawSend({ type: "room-member-mute", userId, muted });
   }
 
   // Pins the room somewhere on the world map, or takes it off it entirely

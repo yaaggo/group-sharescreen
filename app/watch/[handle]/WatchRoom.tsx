@@ -1316,6 +1316,8 @@ export function WatchRoom({ handle }: { handle: string }) {
   // allow it. The server refuses either way; these are what actually stop the
   // local capture instead of leaving it running with the room told otherwise.
   //
+  const isSelfRoomMuted = Boolean(state.selfUserId && state.roomMutedMembers.includes(state.selfUserId));
+
   // Going through toggleMic (rather than some quieter stop) also clears the
   // stored "mic starts on" preference, which is what stops this from
   // repeating the whole start-then-refuse round trip on every join into a
@@ -1323,9 +1325,9 @@ export function WatchRoom({ handle }: { handle: string }) {
   // forgotten, not just suspended for this room — turning the mic back on
   // anywhere sets it again.
   useEffect(() => {
-    if (isMicOn && !canUseRoomPermission("mic")) toggleMic();
+    if (isMicOn && (!canUseRoomPermission("mic") || isSelfRoomMuted)) toggleMic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMicOn, isRoomManager, state.roomPermissions.mic]);
+  }, [isMicOn, isRoomManager, state.roomPermissions.mic, isSelfRoomMuted]);
 
   // "Você criou uma sala pública!" — opened by itself, once, for whoever's
   // join brought the room into existence (see the server's "room-state"
@@ -2965,6 +2967,7 @@ export function WatchRoom({ handle }: { handle: string }) {
         isOwner={isRoomOwner}
         isAdmin={isRoomAdmin}
         isApp={mounted && isDesktopApp()}
+        isRoomMuted={isSelfRoomMuted}
         verified={state.account?.flags?.includes("VERIFIED")}
         micOn={isMicOn}
         sharing={isSharing}
@@ -2975,6 +2978,7 @@ export function WatchRoom({ handle }: { handle: string }) {
       />
       {visiblePeers.map((p) => {
         const volumeKey = p.userId ?? p.id;
+        const isPeerRoomMuted = Boolean(p.userId && state.roomMutedMembers.includes(p.userId));
         return (
           <ParticipantRow
             key={p.id}
@@ -2984,6 +2988,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             isOwner={Boolean(p.userId) && p.userId === state.roomOwnerId}
             isAdmin={state.roomAdmins.some((a) => a.id === p.userId)}
             isApp={p.app}
+            isRoomMuted={isPeerRoomMuted}
             verified={p.flags?.includes("VERIFIED")}
             micOn={p.mic}
             sharing={p.sharing}
@@ -2991,7 +2996,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             camera={p.camera}
             sharingVideo={peerSharesVideo(p.userId)}
             micStream={remoteMicStreams[p.id]}
-            muted={micsMuted || mutedPeerIds.has(p.id)}
+            muted={micsMuted || mutedPeerIds.has(p.id) || isPeerRoomMuted}
             onToggleMute={() => togglePeerMute(p.id)}
             volume={peerVolumes[volumeKey] ?? 1}
             onVolumeChange={(volume) => setPeerVolume(volumeKey, volume)}
@@ -3576,12 +3581,14 @@ export function WatchRoom({ handle }: { handle: string }) {
       )}
 
       {Object.entries(remoteMicStreams).map(([peerId, stream]) => {
-        const volumeKey = state.peers.find((p) => p.id === peerId)?.userId ?? peerId;
+        const peer = state.peers.find((p) => p.id === peerId);
+        const volumeKey = peer?.userId ?? peerId;
+        const isPeerRoomMuted = Boolean(peer?.userId && state.roomMutedMembers.includes(peer.userId));
         return (
           <RemoteAudio
             key={peerId}
             stream={stream}
-            muted={micsMuted || mutedPeerIds.has(peerId)}
+            muted={micsMuted || mutedPeerIds.has(peerId) || isPeerRoomMuted}
             volume={peerVolumes[volumeKey] ?? 1}
             sinkId={speakerDeviceId}
           />

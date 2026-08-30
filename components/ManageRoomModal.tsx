@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { useState, useMemo, type ComponentType } from "react";
 import { BsGearFill } from "react-icons/bs";
-import { FaCrown } from "react-icons/fa";
+import { FaCrown, FaBan } from "react-icons/fa";
 import {
   MdOutlineOndemandVideo,
   MdChevronRight,
@@ -10,6 +10,15 @@ import {
   MdOutlineChat,
   MdGif,
   MdOutlineMap,
+  MdPeopleAlt,
+  MdPersonRemove,
+  MdBlock,
+  MdMicOff,
+  MdMic,
+  MdOutlineCheckCircle,
+  MdSearch,
+  MdClose,
+  MdSecurity,
 } from "react-icons/md";
 import {
   signalingClient,
@@ -22,6 +31,7 @@ import { DisplayUserName } from "./DisplayUserName";
 import { WorldMap } from "./WorldMap";
 import { usePublicRoomMarkers } from "@/lib/usePublicRoomMarkers";
 import { MicIcon, ScreenIcon, CameraIcon } from "./icons";
+import { Tooltip } from "./Tooltip";
 import Link from "next/link";
 
 // The room-level switches, in the order they're shown. Each label is phrased
@@ -45,7 +55,8 @@ const PERMISSION_ROWS: {
   { key: "gif", label: "Permitir que todos enviem GIFS", icon: MdGif },
 ];
 
-type View = "menu" | "admins" | "permissions" | "location";
+type View = "menu" | "members" | "admins" | "permissions" | "location";
+type MembersTab = "active" | "banned";
 
 // Rounded for display only — the full precision is what gets sent. Six
 // decimals is roughly a tenth of a metre, far past anything a click on a
@@ -54,15 +65,24 @@ function formatCoordinate(value: number): string {
   return value.toFixed(4);
 }
 
+function formatBanDate(timestamp: number): string {
+  try {
+    const date = new Date(timestamp);
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return "";
+  }
+}
+
 // The popup behind the "Gerenciar sala" button above the chat (see
 // WatchRoom.tsx) — an ntpopups popup type, registered as "manage_room" in
 // NtPopups.tsx, same pattern as AddVideoSourceModal.
-//
-// Deliberately takes no `data`: everything it shows (the peer list, who's an
-// admin, which permissions are on) is live room state that can change while
-// it's open — someone joins, another admin flips a switch — so it reads
-// straight from the signaling store rather than a snapshot captured when it
-// was opened.
 export type ManageRoomPopupData = {
   // Which screen to open on. WatchRoom's "Local no mapa" button opens this
   // same popup straight on "location" (see openRoomLocationPopup there),
@@ -92,6 +112,12 @@ export function ManageRoomModal({
 }) {
   const state = useSignaling();
   const [view, setView] = useState<View>(data?.initialView ?? "menu");
+  const [membersTab, setMembersTab] = useState<MembersTab>("active");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [banTarget, setBanTarget] = useState<{ userId: string; name: string } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [kickTarget, setKickTarget] = useState<{ userId: string; name: string } | null>(null);
+
   // Where the pin currently sits in the "Definir local do mundo" view —
   // local until "Salvar local", so a stray click on the map doesn't move the
   // room out from under everyone mid-drag. Seeded once, from wherever the
@@ -106,150 +132,556 @@ export function ManageRoomModal({
   const { markers } = usePublicRoomMarkers({ excludeHandle: state.room ?? undefined });
 
   const isOwner = Boolean(state.selfUserId && state.roomOwnerId === state.selfUserId);
-  // Admins may flip the permission switches but not hand out admin — see
-  // server/signaling.ts's isRoomOwner for why that stays the owner's alone.
+  const isManager = isOwner || state.roomAdmins.some((a) => a.id === state.selfUserId);
+  // Admins may flip the permission switches and moderate regular members,
+  // but cannot promote/demote admins — that stays the owner's alone.
   const canManageAdmins = isOwner;
 
   // Moderators ride the peer list so their WebRTC connections get set up, but
-  // are invisible to real participants (see WatchRoom's visiblePeers) — they
-  // must not show up here as someone to promote either. Nor must anyone an
-  // older server never sent a stable userId for: there'd be nothing to key
-  // the promotion on.
-  const promotablePeers = state.peers.filter(
-    (p): p is PeerInfo & { userId: string } =>
-      p.role !== "moderator" && Boolean(p.userId) && p.userId !== state.roomOwnerId
-  );
+  // are invisible to real participants — they must not show up here.
+  const promotablePeers = useMemo(() => {
+    return state.peers.filter(
+      (p): p is PeerInfo & { userId: string } =>
+        p.role !== "moderator" && Boolean(p.userId) && p.userId !== state.roomOwnerId
+    );
+  }, [state.peers, state.roomOwnerId]);
+
+  // Active room peers for moderation (excluding self and moderators)
+  const moderatablePeers = useMemo(() => {
+    return state.peers.filter(
+      (p) => p.role !== "moderator" && Boolean(p.userId) && p.userId !== state.selfUserId
+    );
+  }, [state.peers, state.selfUserId]);
+
+  // Filtered lists based on search
+  const filteredPeers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    if (!query) return moderatablePeers;
+    return moderatablePeers.filter((p) => p.name.toLowerCase().includes(query));
+  }, [moderatablePeers, memberSearch]);
+
+  const filteredBannedMembers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    if (!query) return state.roomBannedMembers;
+    return state.roomBannedMembers.filter((b) => b.name.toLowerCase().includes(query));
+  }, [state.roomBannedMembers, memberSearch]);
 
   const saved = state.roomLocation;
   const pinMoved = pick?.lat !== saved?.lat || pick?.lng !== saved?.lng;
-  // Read-only unless the opener said otherwise *and* this viewer really is a
-  // manager — the flag says which button was pressed, the check says whether
-  // they were entitled to press it.
-  const isManager = isOwner || state.roomAdmins.some((a) => a.id === state.selfUserId);
   const canEditLocation = (data?.canEdit ?? true) && isManager;
   // Only ever the celebration when there is genuinely something to celebrate
   // *and* to act on: whoever cannot move the pin has nothing to do here.
   const celebrating = Boolean(data?.justCreated) && canEditLocation;
 
   const title =
-    view === "admins"
-      ? "Gerenciar administradores"
-      : view === "permissions"
-        ? "Gerenciar permissões"
-        : view === "location"
-          ? celebrating
-            ? "Você criou uma sala pública!"
-            : canEditLocation
-              ? "Definir local do mundo"
-              : "Local da sala no mundo"
-          : "Gerenciar sala";
+    view === "members"
+      ? "Gerenciar membros"
+      : view === "admins"
+        ? "Gerenciar administradores"
+        : view === "permissions"
+          ? "Gerenciar permissões"
+          : view === "location"
+            ? celebrating
+              ? "Você criou uma sala pública!"
+              : canEditLocation
+                ? "Definir local do mundo"
+                : "Local da sala no mundo"
+            : "Gerenciar sala";
 
+  // Permission check helper for moderating a specific user
+  function canModerateUser(targetUserId?: string, targetIsAdmin = false): boolean {
+    if (!targetUserId || !isManager) return false;
+    if (targetUserId === state.selfUserId) return false;
+    if (targetUserId === state.roomOwnerId) return false;
+    if (targetIsAdmin && !isOwner) return false;
+    return true;
+  }
+
+  function handleConfirmBan() {
+    if (!banTarget) return;
+    signalingClient.banRoomMember(banTarget.userId, banTarget.name, banReason.trim() || undefined);
+    setBanTarget(null);
+    setBanReason("");
+  }
+
+  function handleConfirmKick() {
+    if (!kickTarget) return;
+    signalingClient.kickRoomMember(kickTarget.userId);
+    setKickTarget(null);
+  }
 
   return (
     <div
-      className={`flex max-h-[92vh] max-w-full flex-col gap-4 overflow-y-auto bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 ${
-        // The map view fills whatever box the popup was opened with — its
-        // width is set on the popup itself (see WatchRoom's
-        // openRoomLocationPopup), because a fixed width here would be sized
-        // against the *viewport* while the popup is sized against its own
-        // container, and the two disagree by exactly enough to overflow. The
-        // other views have no such caller, so they still set their own.
-        view === "location" ? "w-full" : "w-80"
+      className={`flex max-h-[92vh] max-w-full flex-col gap-4 overflow-y-auto bg-white p-5 text-zinc-900 shadow-2xl transition-all dark:bg-zinc-950 dark:text-zinc-50 ${
+        view === "location" ? "w-full" : "w-full max-w-lg sm:w-[32rem]"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {/* No back arrow when this popup was opened straight onto a view —
-              there is no menu behind it to go back to. */}
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
+        <div className="flex min-w-0 items-center gap-2">
           {view !== "menu" && data?.initialView === undefined && (
             <button
               type="button"
-              onClick={() => setView("menu")}
+              onClick={() => {
+                setView("menu");
+                setBanTarget(null);
+                setKickTarget(null);
+                setMemberSearch("");
+              }}
               aria-label="Voltar"
-              className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+              className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
-              <MdArrowBack className="h-4 w-4" />
+              <MdArrowBack className="h-5 w-5" />
             </button>
           )}
-          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold">
-            {/* The congratulation is not a settings screen, whatever it
-                reuses — a gear on it reads as a chore. */}
-            {celebrating ? (
-              <MdOutlineMap className="h-4 w-4 shrink-0 text-sky-500" />
+          <div className="flex min-w-0 items-center gap-2 truncate">
+            {view === "members" ? (
+              <MdPeopleAlt className="h-5 w-5 shrink-0 text-sky-500" />
+            ) : view === "admins" ? (
+              <FaCrown className="h-4.5 w-4.5 shrink-0 text-amber-500" />
+            ) : view === "permissions" ? (
+              <MdSecurity className="h-5 w-5 shrink-0 text-emerald-500" />
+            ) : celebrating ? (
+              <MdOutlineMap className="h-5 w-5 shrink-0 text-sky-500" />
             ) : (
-              <BsGearFill className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <BsGearFill className="h-4.5 w-4.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
             )}
-            {title}
-          </p>
+            <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => closePopup(false)}
           aria-label="Fechar"
-          className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-lg leading-none opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+          className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
-          ×
+          <MdClose className="h-5 w-5" />
         </button>
       </div>
 
+      {/* Main Menu */}
       {view === "menu" && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5 pt-1">
+          {/* Gerenciar Membros Option */}
+          <button
+            type="button"
+            onClick={() => {
+              setView("members");
+              setMembersTab("active");
+            }}
+            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-sky-300 hover:bg-sky-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-sky-900/60 dark:hover:bg-sky-950/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600 transition group-hover:bg-sky-600 group-hover:text-white dark:bg-sky-950/60 dark:text-sky-400 dark:group-hover:bg-sky-600 dark:group-hover:text-white">
+                <MdPeopleAlt className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Gerenciar membros
+                  </span>
+                  {state.roomBannedMembers.length > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-950/60 dark:text-red-400">
+                      {state.roomBannedMembers.length} banido{state.roomBannedMembers.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Expulsar, banir, desbanir ou mutar participantes
+                </span>
+              </div>
+            </div>
+            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-sky-600 dark:text-zinc-500 dark:group-hover:text-sky-400" />
+          </button>
+
+          {/* Gerenciar Administradores Option */}
           {canManageAdmins && (
             <button
               type="button"
               onClick={() => setView("admins")}
-              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-3 py-2.5 text-left text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-amber-300 hover:bg-amber-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-amber-900/60 dark:hover:bg-amber-950/20"
             >
-              <span className="flex items-center gap-2">
-                <FaCrown className="h-4 w-4 shrink-0 text-amber-500" />
-                Gerenciar administradores
-              </span>
-              <MdChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 transition group-hover:bg-amber-500 group-hover:text-white dark:bg-amber-950/60 dark:text-amber-400 dark:group-hover:bg-amber-500 dark:group-hover:text-white">
+                  <FaCrown className="h-4.5 w-4.5" />
+                </div>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Gerenciar administradores
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
+                      {state.roomAdmins.length}
+                    </span>
+                  </div>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Promover ou remover administradores da sala
+                  </span>
+                </div>
+              </div>
+              <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600 dark:text-zinc-500 dark:group-hover:text-amber-400" />
             </button>
           )}
+
+          {/* Gerenciar Permissões Option */}
           <button
             type="button"
             onClick={() => setView("permissions")}
-            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-3 py-2.5 text-left text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
           >
-            <span className="flex items-center gap-2">
-              <BsGearFill className="h-4 w-4 shrink-0 opacity-70" />
-              Gerenciar permissões
-            </span>
-            <MdChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 transition group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-950/60 dark:text-emerald-400 dark:group-hover:bg-emerald-600 dark:group-hover:text-white">
+                <MdSecurity className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Gerenciar permissões
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Controle de microfone, transmissão, câmera e chat
+                </span>
+              </div>
+            </div>
+            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-600 dark:text-zinc-500 dark:group-hover:text-emerald-400" />
           </button>
+
           {!canManageAdmins && (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Só o dono da sala pode adicionar ou remover administradores.
+            <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Apenas o dono da sala pode nomear novos administradores.
             </p>
           )}
         </div>
       )}
 
+      {/* View: Members (Active + Banned) */}
+      {view === "members" && (
+        <div className="flex flex-col gap-4">
+          {/* Sub-tabs */}
+          <div className="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-900">
+            <button
+              type="button"
+              onClick={() => {
+                setMembersTab("active");
+                setBanTarget(null);
+                setKickTarget(null);
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md py-1.5 text-xs font-medium transition ${
+                membersTab === "active"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <span>Na sala</span>
+              <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[10px] dark:bg-zinc-700">
+                {moderatablePeers.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMembersTab("banned");
+                setBanTarget(null);
+                setKickTarget(null);
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md py-1.5 text-xs font-medium transition ${
+                membersTab === "banned"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <span>Banidos</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                  state.roomBannedMembers.length > 0
+                    ? "bg-red-100 text-red-600 dark:bg-red-950/80 dark:text-red-400"
+                    : "bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
+                }`}
+              >
+                {state.roomBannedMembers.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="relative">
+            <MdSearch className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+            <input
+              type="text"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              placeholder={membersTab === "active" ? "Buscar participantes..." : "Buscar banidos..."}
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 py-2 pl-9 pr-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            />
+            {memberSearch && (
+              <button
+                type="button"
+                onClick={() => setMemberSearch("")}
+                className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <MdClose className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Ban Confirmation Modal Dialog */}
+          {banTarget && (
+            <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <FaBan className="h-4 w-4 shrink-0" />
+                <h3 className="text-sm font-semibold">Banir {banTarget.name}?</h3>
+              </div>
+              <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                Este participante será expulso imediatamente e bloqueado de entrar novamente nesta sala.
+              </p>
+              <input
+                type="text"
+                maxLength={80}
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                placeholder="Motivo do banimento (opcional)"
+                className="w-full rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBanTarget(null);
+                    setBanReason("");
+                  }}
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmBan}
+                  className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500"
+                >
+                  Confirmar Banimento
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Kick Confirmation Modal Dialog */}
+          {kickTarget && (
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                <MdPersonRemove className="h-5 w-5 shrink-0" />
+                <h3 className="text-sm font-semibold">Expulsar {kickTarget.name}?</h3>
+              </div>
+              <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                O participante sairá da sala atual, mas poderá retornar quando desejar.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setKickTarget(null)}
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmKick}
+                  className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+                >
+                  Confirmar Expulsão
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 1: Active Participants in room */}
+          {membersTab === "active" && !banTarget && !kickTarget && (
+            <div className="flex flex-col gap-2">
+              {filteredPeers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 py-8 text-center dark:border-zinc-800">
+                  <MdPeopleAlt className="mb-2 h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+                  <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {memberSearch
+                      ? "Nenhum participante encontrado para a busca."
+                      : "Nenhum outro participante na sala."}
+                  </p>
+                </div>
+              ) : (
+                <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-0.5">
+                  {filteredPeers.map((peer) => {
+                    const peerIsAdmin = state.roomAdmins.some((a) => a.id === peer.userId);
+                    const peerIsOwner = peer.userId === state.roomOwnerId;
+                    const isMuted = Boolean(peer.userId && state.roomMutedMembers.includes(peer.userId));
+                    const canModerate = canModerateUser(peer.userId, peerIsAdmin);
+
+                    return (
+                      <li
+                        key={peer.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-2.5 transition dark:border-zinc-800/80 dark:bg-zinc-900/40"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <DisplayUserName
+                            name={peer.name}
+                            isGuest={peer.isGuest}
+                            verified={peer.flags?.includes("VERIFIED")}
+                            className="truncate text-xs font-medium"
+                          />
+                          {peerIsOwner ? (
+                            <Tooltip content="Dono da sala">
+                              <span className="flex shrink-0 items-center">
+                                <FaCrown className="h-3 w-3 text-amber-500" />
+                              </span>
+                            </Tooltip>
+                          ) : (
+                            peerIsAdmin && (
+                              <Tooltip content="Administrador">
+                                <span className="flex shrink-0 items-center">
+                                  <FaCrown className="h-3 w-3 text-zinc-400 dark:text-zinc-500" />
+                                </span>
+                              </Tooltip>
+                            )
+                          )}
+                          {isMuted && (
+                            <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 dark:bg-red-950/70 dark:text-red-400">
+                              Mudo
+                            </span>
+                          )}
+                        </div>
+
+                        {canModerate ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {/* Mute/Unmute toggle */}
+                            <Tooltip content={isMuted ? "Desmutar microfone" : "Mutar microfone na sala"}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (peer.userId) {
+                                    signalingClient.setRoomMemberMute(peer.userId, !isMuted);
+                                  }
+                                }}
+                                className={`flex h-7 w-7 items-center justify-center rounded-lg border transition ${
+                                  isMuted
+                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/60 dark:text-red-400"
+                                    : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                }`}
+                              >
+                                {isMuted ? <MdMicOff className="h-4 w-4" /> : <MdMic className="h-4 w-4" />}
+                              </button>
+                            </Tooltip>
+
+                            {/* Kick button */}
+                            <Tooltip content="Expulsar da sala">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (peer.userId) {
+                                    setKickTarget({ userId: peer.userId, name: peer.name });
+                                  }
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-200 text-amber-600 transition hover:bg-amber-50 hover:text-amber-700 dark:border-amber-900/70 dark:text-amber-400 dark:hover:bg-amber-950/60"
+                              >
+                                <MdPersonRemove className="h-4 w-4" />
+                              </button>
+                            </Tooltip>
+
+                            {/* Ban button */}
+                            <Tooltip content="Banir da sala">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (peer.userId) {
+                                    setBanTarget({ userId: peer.userId, name: peer.name });
+                                    setBanReason("");
+                                  }
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:border-red-900/70 dark:text-red-400 dark:hover:bg-red-950/60"
+                              >
+                                <MdBlock className="h-4 w-4" />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] italic text-zinc-400">Protegido</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: Banned Members List */}
+          {membersTab === "banned" && !banTarget && !kickTarget && (
+            <div className="flex flex-col gap-2">
+              {filteredBannedMembers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 py-8 text-center dark:border-zinc-800">
+                  <MdOutlineCheckCircle className="mb-2 h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+                  <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {memberSearch
+                      ? "Nenhum membro banido encontrado para a busca."
+                      : "Nenhum membro está banido nesta sala."}
+                  </p>
+                </div>
+              ) : (
+                <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-0.5">
+                  {filteredBannedMembers.map((banned) => (
+                    <li
+                      key={banned.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-red-200/60 bg-red-50/20 p-2.5 transition dark:border-red-900/40 dark:bg-red-950/10"
+                    >
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                          {banned.name}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <span>Banido em {formatBanDate(banned.bannedAt)}</span>
+                          {banned.reason && (
+                            <span className="truncate italic text-zinc-600 dark:text-zinc-300">
+                              • &quot;{banned.reason}&quot;
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => signalingClient.unbanRoomMember(banned.id)}
+                        className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/80"
+                      >
+                        <MdOutlineCheckCircle className="h-3.5 w-3.5" />
+                        Desbanir
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* View: Admins */}
       {view === "admins" && (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Administradores ({state.roomAdmins.length})
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Administradores atuais ({state.roomAdmins.length})
             </p>
             {state.roomAdmins.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Ninguém por enquanto. Um administrador pode mudar as permissões da sala e não é
-                afetado por elas.
+              <p className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400">
+                Nenhum administrador adicional nomeado. Administradores podem moderar membros e
+                ajustar regras da sala.
               </p>
             ) : (
-              <ul className="flex flex-col gap-1">
+              <ul className="flex flex-col gap-1.5">
                 {state.roomAdmins.map((admin) => {
-                  // The stored name is only a fallback — if they're in the
-                  // room right now, the peer list has the current one.
                   const live = state.peers.find((p) => p.userId === admin.id);
                   return (
                     <li
                       key={admin.id}
-                      className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-900"
+                      className="flex items-center justify-between gap-2 rounded-xl bg-zinc-50 p-2.5 text-xs dark:bg-zinc-900/50"
                     >
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <FaCrown className="h-3 w-3 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                        <FaCrown className="h-3 w-3 shrink-0 text-amber-500" />
                         <DisplayUserName
                           name={live?.name || admin.name || "Participante"}
                           isGuest={live?.isGuest}
@@ -257,15 +689,15 @@ export function ManageRoomModal({
                           className="truncate font-medium"
                         />
                         {!live && (
-                          <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">
-                            (fora da sala)
+                          <span className="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">
+                            (ausente)
                           </span>
                         )}
                       </span>
                       <button
                         type="button"
                         onClick={() => signalingClient.removeRoomAdmin(admin.id)}
-                        className="shrink-0 rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                        className="shrink-0 rounded-lg border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
                       >
                         Remover
                       </button>
@@ -276,22 +708,22 @@ export function ManageRoomModal({
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Participantes da sala
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Promover participantes
             </p>
             {promotablePeers.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Não há mais ninguém na sala para promover.
+              <p className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400">
+                Não há outros participantes na sala para promover.
               </p>
             ) : (
-              <ul className="flex flex-col gap-1">
+              <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
                 {promotablePeers.map((peer) => {
                   const alreadyAdmin = state.roomAdmins.some((a) => a.id === peer.userId);
                   return (
                     <li
                       key={peer.id}
-                      className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-2.5 text-xs dark:border-zinc-800/80 dark:bg-zinc-900/40"
                     >
                       <DisplayUserName
                         name={peer.name}
@@ -303,7 +735,7 @@ export function ManageRoomModal({
                         type="button"
                         disabled={alreadyAdmin}
                         onClick={() => signalingClient.addRoomAdmin(peer.userId)}
-                        className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                        className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/60"
                       >
                         {alreadyAdmin ? "Já é admin" : "Tornar admin"}
                       </button>
@@ -316,6 +748,7 @@ export function ManageRoomModal({
         </div>
       )}
 
+      {/* View: Location */}
       {view === "location" && (
         <div className="flex flex-col gap-3">
           <p
@@ -341,7 +774,11 @@ export function ManageRoomModal({
               </>
             ) : canEditLocation ? (
               <>
-                Defina um lugar para que a sala fique visível no <Link style={{color: "#25baff"}} href={"/worldmap"} target="_blank">mapa de salas</Link>. Pessoas que moram perto podem começar aparecer.
+                Defina um lugar para que a sala fique visível no{" "}
+                <Link style={{ color: "#25baff" }} href={"/worldmap"} target="_blank">
+                  mapa de salas
+                </Link>
+                . Pessoas que moram perto podem começar a aparecer.
               </>
             ) : (
               <>
@@ -352,11 +789,7 @@ export function ManageRoomModal({
             )}
           </p>
 
-          {/* Sized against the viewport rather than a fixed height: this is
-              the whole point of the view, and the popup is as tall as the
-              window allows. The floor keeps it usable on a phone, where a
-              percentage of a short screen is not much map. */}
-          <div className="h-[min(60vh,32rem)] min-h-64 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+          <div className="h-[min(60vh,32rem)] min-h-64 overflow-hidden rounded-xl border border-zinc-300 shadow-inner dark:border-zinc-800">
             <WorldMap
               className="h-full w-full"
               searchable
@@ -364,13 +797,7 @@ export function ManageRoomModal({
               // spot being picked has some context around it.
               markers={markers}
               pick={pick}
-              // Omitted entirely for a viewer — without it the map ignores
-              // clicks, which is what makes this read-only rather than
-              // "editable but rejected by the server".
               onPick={canEditLocation ? (lat, lng) => setPick({ lat, lng }) : undefined}
-              // Opens on the existing pin when there is one, so neither
-              // "move it slightly" nor "where is this?" starts by hunting the
-              // globe for it.
               center={pick ? [pick.lat, pick.lng] : undefined}
               zoom={pick ? 6 : undefined}
             />
@@ -400,35 +827,27 @@ export function ManageRoomModal({
           </p>
 
           {canEditLocation && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="button"
                 disabled={!pick || !pinMoved}
                 onClick={() => {
                   signalingClient.setRoomLocation(pick);
-                  // The congratulation is a one-shot errand, opened without
-                  // being asked for: once it's done, get out of the way.
-                  // The button reached from the room stays put, since it's
-                  // just as likely to be a nudge of a pin that's off.
                   if (celebrating) closePopup(true);
                 }}
-                className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saved ? "Salvar novo local" : "Salvar local"}
               </button>
-              {/* Only in the popup nobody asked for. Everywhere else the ×
-                  is the way out and a second one would just be noise. */}
               {celebrating && (
                 <button
                   type="button"
                   onClick={() => closePopup(false)}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
                 >
                   Agora não
                 </button>
               )}
-              {/* Only offered once there is something to take off the map —
-                  clearing a room that was never placed does nothing. */}
               {saved && (
                 <button
                   type="button"
@@ -436,7 +855,7 @@ export function ManageRoomModal({
                     signalingClient.setRoomLocation(null);
                     setPick(null);
                   }}
-                  className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                  className="rounded-xl border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
                 >
                   Remover do mapa
                 </button>
@@ -446,49 +865,42 @@ export function ManageRoomModal({
         </div>
       )}
 
+      {/* View: Permissions */}
       {view === "permissions" && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Ao desativar uma opção, só o dono e os administradores da sala continuam podendo fazer
-            aquilo.
+            Ao desativar uma opção, apenas o dono e os administradores da sala continuam autorizados a
+            utilizá-la.
           </p>
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-1.5">
             {PERMISSION_ROWS.map(({ key, label, icon: Icon }) => {
               const allowed = state.roomPermissions[key];
               return (
                 <li key={key}>
                   <button
                     type="button"
-                    // Belt and braces: this view is only reachable from the
-                    // manager-gated menu, and the server refuses the write
-                    // anyway — but this component is now openable by ordinary
-                    // participants (read-only "Local no mapa"), so nothing
-                    // here should assume otherwise.
                     disabled={!isManager}
                     onClick={() => signalingClient.setRoomPermission(key, !allowed)}
                     aria-pressed={allowed}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-zinc-900"
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/40 px-3.5 py-3 text-left text-xs font-medium transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:bg-zinc-900"
                   >
-                    <span className="flex min-w-0 items-center gap-2">
+                    <span className="flex min-w-0 items-center gap-2.5">
                       <Icon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-4.5 w-4.5 shrink-0 ${
                           allowed
-                            ? "text-emerald-600 dark:text-emerald-500"
+                            ? "text-emerald-600 dark:text-emerald-400"
                             : "text-zinc-400 dark:text-zinc-600"
                         }`}
                       />
-                      <span className="min-w-0">{label}</span>
+                      <span className="min-w-0 text-zinc-800 dark:text-zinc-200">{label}</span>
                     </span>
-                    {/* A plain pill rather than a checkbox, so this reads the
-                        same as the header's other on/off rows (see
-                        WatchRoom's MenuToggleRow). */}
                     <span
                       className={`relative h-5 w-9 shrink-0 rounded-full transition ${
                         allowed ? "bg-emerald-600" : "bg-zinc-300 dark:bg-zinc-700"
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${
                           allowed ? "left-[1.125rem]" : "left-0.5"
                         }`}
                       />
