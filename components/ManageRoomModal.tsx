@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useMemo, type ComponentType } from "react";
+import { useEffect, useState, useMemo, type ComponentType } from "react";
+import {
+  MIN_ROOM_MEMBER_LIMIT,
+  MAX_ROOM_MEMBER_LIMIT,
+} from "@/lib/roomLimits";
 import { BsGearFill } from "react-icons/bs";
 import { FaCrown, FaBan } from "react-icons/fa";
 import {
+  MdGavel,
+  MdGroups,
   MdOutlineOndemandVideo,
   MdChevronRight,
   MdArrowBack,
@@ -25,6 +31,7 @@ import {
   type RoomPermissionKey,
   type PeerInfo,
   type RoomLocation,
+  type RoomBan,
 } from "@/lib/signalingClient";
 import { useSignaling } from "@/lib/useSignaling";
 import { DisplayUserName } from "./DisplayUserName";
@@ -55,7 +62,7 @@ const PERMISSION_ROWS: {
   { key: "gif", label: "Permitir que todos enviem GIFS", icon: MdGif },
 ];
 
-type View = "menu" | "members" | "admins" | "permissions" | "location";
+type View = "menu" | "members" | "admins" | "permissions" | "location" | "limit" | "bans";
 type MembersTab = "active" | "banned";
 
 // Rounded for display only — the full precision is what gets sent. Six
@@ -125,6 +132,11 @@ export function ManageRoomModal({
   // edit, and the popup is opened straight onto this view (see
   // WatchRoom's openRoomLocationPopup) so there is no later moment to seed it.
   const [pick, setPick] = useState<RoomLocation | null>(state.roomLocation);
+  // Seeded once from the room's current limit, and left alone after: it is the
+  // unsaved edit, and re-syncing it while somebody types would fight them.
+  const [limitInput, setLimitInput] = useState(
+    state.roomMemberLimit === null ? "" : String(state.roomMemberLimit)
+  );
   // The rooms already on the map, drawn under the pin being placed. Someone
   // choosing a spot is choosing it *relative to* other rooms — and an owner
   // looking at an empty globe has no reason to think anyone would ever find
@@ -160,11 +172,33 @@ export function ManageRoomModal({
     return moderatablePeers.filter((p) => p.name.toLowerCase().includes(query));
   }, [moderatablePeers, memberSearch]);
 
+  const allBannedList: RoomBan[] = useMemo(() => {
+    if (state.roomBans && state.roomBans.length > 0) {
+      return state.roomBans;
+    }
+    return state.roomBannedMembers.map((b) => ({
+      id: b.id,
+      name: b.name,
+      bannedAt: b.bannedAt,
+      reason: b.reason,
+    }));
+  }, [state.roomBans, state.roomBannedMembers]);
+
   const filteredBannedMembers = useMemo(() => {
     const query = memberSearch.trim().toLowerCase();
-    if (!query) return state.roomBannedMembers;
-    return state.roomBannedMembers.filter((b) => b.name.toLowerCase().includes(query));
-  }, [state.roomBannedMembers, memberSearch]);
+    if (!query) return allBannedList;
+    return allBannedList.filter(
+      (b) => b.name.toLowerCase().includes(query) || b.id.toLowerCase().includes(query)
+    );
+  }, [allBannedList, memberSearch]);
+
+  // Asked for rather than pushed on join: most managers never open this, and
+  // who a room banned is not something the room at large is told (see the
+  // server's sendRoomBansToManagers). Re-asked on entering the tab, so a list
+  // left open through a reconnect is not a stale one.
+  useEffect(() => {
+    if (view === "members" || view === "bans") signalingClient.requestRoomBans();
+  }, [view]);
 
   const saved = state.roomLocation;
   const pinMoved = pick?.lat !== saved?.lat || pick?.lng !== saved?.lng;
@@ -180,13 +214,17 @@ export function ManageRoomModal({
         ? "Gerenciar administradores"
         : view === "permissions"
           ? "Gerenciar permissões"
-          : view === "location"
-            ? celebrating
-              ? "Você criou uma sala pública!"
-              : canEditLocation
-                ? "Definir local do mundo"
-                : "Local da sala no mundo"
-            : "Gerenciar sala";
+          : view === "limit"
+            ? "Limite de participantes"
+            : view === "bans"
+              ? "Banimentos"
+              : view === "location"
+                ? celebrating
+                  ? "Você criou uma sala pública!"
+                  : canEditLocation
+                    ? "Definir local do mundo"
+                    : "Local da sala no mundo"
+                : "Gerenciar sala";
 
   // Permission check helper for moderating a specific user
   function canModerateUser(targetUserId?: string, targetIsAdmin = false): boolean {
@@ -324,6 +362,33 @@ export function ManageRoomModal({
           )}
 
           {/* Gerenciar Permissões Option */}
+          <button
+            type="button"
+            onClick={() => setView("limit")}
+            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-3 py-2.5 text-left text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            <span className="flex items-center gap-2">
+              <MdGroups className="h-4 w-4 shrink-0 text-sky-500" />
+              Limite de participantes
+            </span>
+            <span className="flex items-center gap-1 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              {state.roomMemberLimit ?? "sem limite"}
+              <MdChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+            </span>
+          </button>
+          {canManageAdmins && (
+            <button
+              type="button"
+              onClick={() => setView("bans")}
+              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-3 py-2.5 text-left text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            >
+              <span className="flex items-center gap-2">
+                <MdGavel className="h-4 w-4 shrink-0 text-red-500" />
+                Banimentos
+              </span>
+              <MdChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setView("permissions")}
@@ -862,6 +927,63 @@ export function ManageRoomModal({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {view === "limit" && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+            Quantas pessoas cabem na sala ao mesmo tempo. Quem chega depois de cheia vê um aviso
+            e não entra. Você e os administradores nunca são barrados pelo próprio limite.
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Agora: <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              {state.peers.filter((p) => p.role !== "moderator").length + 1}
+            </span>{" "}
+            na sala.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={MIN_ROOM_MEMBER_LIMIT}
+              max={MAX_ROOM_MEMBER_LIMIT}
+              value={limitInput}
+              onChange={(e) => setLimitInput(e.target.value)}
+              placeholder="Sem limite"
+              aria-label="Limite de participantes"
+              className="w-28 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const parsed = Number(limitInput);
+                signalingClient.setRoomMemberLimit(
+                  limitInput.trim() === "" || !Number.isFinite(parsed) ? null : parsed
+                );
+              }}
+              className="flex-1 rounded-lg bg-zinc-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              Salvar
+            </button>
+          </div>
+          {/* Only offered once there is one to lift — "remover" on a room that
+              never had a limit is a button that does nothing. */}
+          {state.roomMemberLimit !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                setLimitInput("");
+                signalingClient.setRoomMemberLimit(null);
+              }}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+            >
+              Tirar o limite
+            </button>
+          )}
+          <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+            Entre {MIN_ROOM_MEMBER_LIMIT} e {MAX_ROOM_MEMBER_LIMIT}. Baixar o limite não expulsa
+            quem já está aqui — vale de agora em diante.
+          </p>
         </div>
       )}
 

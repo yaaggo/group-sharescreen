@@ -42,6 +42,14 @@ export type SharedFile = {
   updatedAt: number;
 };
 
+// Somebody a room banned. Mirrors the server's RoomBan (see roomStore.ts).
+export type RoomBan = {
+  id: string;
+  name: string;
+  bannedAt: number;
+  reason?: string;
+};
+
 export type PeerInfo = {
   id: string;
   name: string;
@@ -72,6 +80,12 @@ export type PeerInfo = {
   // the channel this names.
   files?: SharedFile[];
   mic: boolean;
+  // Whether they have silenced everyone else's mic for themselves
+  // ("silenciar microfones"). Their own listening setting — nothing about
+  // what they transmit — shown in the participant list because talking to
+  // somebody who cannot hear you is the one thing that list can save you
+  // from. Undefined from a server that predates it, read as false.
+  micsMuted?: boolean;
   role?: "moderator";
   // Stable per-account/per-guest identity (see server/signaling.ts's
   // stableUserId) — unlike `id`, which is reissued on every reconnect, this
@@ -334,6 +348,20 @@ export type SignalingState = {
   // PeerInfo.userId / `selfUserId` above — never against a connection id.
   roomOwnerId: string | null;
   roomAdmins: RoomAdmin[];
+  // Who this room threw out for good (see the server's "room-ban"). Only ever
+  // sent to the room's owner and admins — a list of names of people a room
+  // banned is not something the room at large needs — so it is empty for
+  // everyone else, and empty until it is asked for (see requestRoomBans).
+  roomBans: RoomBan[];
+  // How many ordinary members this room accepts at once, or null for no limit
+  // (see the server's join gate). Public, unlike roomBans — a room being full
+  // is not a secret, and it is what lets the UI say so.
+  roomMemberLimit: number | null;
+  // Set when this room removed *us*: `banned` tells "you may not come back"
+  // apart from "you were kicked out of this one". Null the rest of the time,
+  // and cleared on the next join, so it only ever describes what just
+  // happened.
+  roomRemoval: { banned: boolean } | null;
   roomPermissions: RoomPermissions;
   // Whether the join that produced the room state we're holding is the one
   // that *created* the room, as opposed to walking into one already running
@@ -418,6 +446,9 @@ const initialState: SignalingState = {
   roomCreated: false,
   roomOwnerId: null,
   roomAdmins: [],
+  roomBans: [],
+  roomMemberLimit: null,
+  roomRemoval: null,
   roomPermissions: { ...DEFAULT_ROOM_PERMISSIONS },
   roomBannedMembers: [],
   roomMutedMembers: [],
@@ -825,6 +856,10 @@ class SignalingClient {
           roomCreated: msg.created === true,
           roomOwnerId: typeof msg.ownerId === "string" ? msg.ownerId : null,
           roomAdmins: parseRoomAdmins(msg.admins),
+          roomMemberLimit: typeof msg.memberLimit === "number" ? msg.memberLimit : null,
+          // A fresh join is a fresh answer to "was I thrown out", and the
+          // answer is no — we are in.
+          roomRemoval: null,
           roomPermissions: parseRoomPermissions(msg.permissions),
           roomBannedMembers: parseRoomBannedMembers(msg.bannedMembers),
           roomMutedMembers: parseRoomMutedMembers(msg.mutedMembers),
@@ -912,6 +947,13 @@ class SignalingClient {
           ),
         });
         break;
+      case "peer-mics-muted":
+        this.setState({
+          peers: this.state.peers.map((p) =>
+            p.id === msg.id ? { ...p, micsMuted: Boolean(msg.micsMuted) } : p
+          ),
+        });
+        break;
       case "peer-mic":
         this.setState({
           peers: this.state.peers.map((p) =>
@@ -926,6 +968,7 @@ class SignalingClient {
         this.setState({
           roomOwnerId: typeof msg.ownerId === "string" ? msg.ownerId : this.state.roomOwnerId,
           roomAdmins: parseRoomAdmins(msg.admins),
+          roomMemberLimit: typeof msg.memberLimit === "number" ? msg.memberLimit : null,
           roomPermissions: parseRoomPermissions(msg.permissions),
           roomBannedMembers: parseRoomBannedMembers(msg.bannedMembers),
           roomMutedMembers: parseRoomMutedMembers(msg.mutedMembers),
@@ -1069,6 +1112,21 @@ class SignalingClient {
         });
         break;
       }
+      case "room-bans":
+        this.setState({
+          roomBans: Array.isArray(msg.bans) ? (msg.bans as RoomBan[]) : [],
+        });
+        break;
+      // This room threw us out. The server has already taken us out of it, so
+      // there is nothing to leave — this only records why, for the screen that
+      // says so (see WatchRoom).
+      case "room-removed":
+        this.setState({
+          room: null,
+          peers: [],
+          roomRemoval: { banned: msg.banned === true },
+        });
+        break;
       case "time-sync": {
         const t0 = Number(msg.t0) || 0;
         const serverTime = Number(msg.serverTime) || 0;
@@ -1315,6 +1373,8 @@ class SignalingClient {
       roomCreated: false,
       roomOwnerId: null,
       roomAdmins: [],
+      roomBans: [],
+      roomMemberLimit: null,
       roomPermissions: { ...DEFAULT_ROOM_PERMISSIONS },
       roomBannedMembers: [],
       roomMutedMembers: [],
@@ -1347,18 +1407,6 @@ class SignalingClient {
 
   removeRoomAdmin(userId: string) {
     this.rawSend({ type: "room-admin-remove", userId });
-  }
-
-  kickRoomMember(userId: string) {
-    this.rawSend({ type: "room-kick", userId });
-  }
-
-  banRoomMember(userId: string, name?: string, reason?: string) {
-    this.rawSend({ type: "room-ban", userId, name, reason });
-  }
-
-  unbanRoomMember(userId: string) {
-    this.rawSend({ type: "room-unban", userId });
   }
 
   setRoomMemberMute(userId: string, muted: boolean) {
@@ -1400,6 +1448,49 @@ class SignalingClient {
 
   // Only whoever added it may change this, and only an account may ask for
   // "owner" — both enforced server-side (see allowedControlMode there).
+  // Room moderation, from the member menu (see MemberActionsModal). All three
+  // are owner/admin-only and enforced server-side — kicking and banning by
+  // isRoomManager, lifting a ban by the owner alone.
+  kickMember(userId: string) {
+    this.rawSend({ type: "room-kick", userId });
+  }
+
+  kickRoomMember(userId: string) {
+    this.kickMember(userId);
+  }
+
+  banMember(userId: string) {
+    this.rawSend({ type: "room-ban", userId });
+  }
+
+  banRoomMember(userId: string) {
+    this.banMember(userId);
+  }
+
+  unbanMember(userId: string) {
+    this.rawSend({ type: "room-unban", userId });
+  }
+
+  unbanRoomMember(userId: string) {
+    this.unbanMember(userId);
+  }
+
+  // Asked for rather than pushed on join: most managers never open the list,
+  // and it is the one piece of room state that is not everybody's business.
+  requestRoomBans() {
+    this.rawSend({ type: "room-bans" });
+  }
+
+  fetchRoomBans() {
+    this.requestRoomBans();
+  }
+
+  // null lifts the limit. Owner/admins only, enforced server-side, and the
+  // value is clamped there too (see normalizeMemberLimit).
+  setRoomMemberLimit(limit: number | null) {
+    this.rawSend({ type: "room-member-limit", limit });
+  }
+
   setVideoSourceControlMode(id: string, controlMode: "owner" | "anyone") {
     this.rawSend({ type: "video-source-control-mode", id, controlMode });
   }
@@ -1489,6 +1580,12 @@ class SignalingClient {
 
   setMic(mic: boolean) {
     this.rawSend({ type: "mic", mic });
+  }
+
+  // "Silenciar microfones". Announced rather than kept to ourselves so the
+  // room's participant list can show it — see PeerInfo.micsMuted.
+  setMicsMuted(muted: boolean) {
+    this.rawSend({ type: "mics-muted", muted });
   }
 
   // Called by ChatPanel.tsx's own idle timer, not on every keystroke — see
