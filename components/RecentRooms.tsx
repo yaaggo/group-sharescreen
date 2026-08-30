@@ -8,7 +8,6 @@ import { trackEvent } from "@/lib/analytics";
 import {
   forgetRecentRoom,
   getRecentRooms,
-  MAX_RECENT_ROOMS,
   recentRoomPresentation,
   subscribeRecentRooms,
   type RecentRoom,
@@ -20,7 +19,6 @@ export function RecentRooms() {
   // which a localStorage parse cannot honestly guarantee.
   const [rooms, setRooms] = useState<RecentRoom[]>(() => getRecentRooms());
   useEffect(() => {
-    setRooms(getRecentRooms());
     return subscribeRecentRooms(() => setRooms(getRecentRooms()));
   }, []);
   if (rooms.length === 0) return null;

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FaDiscord } from "react-icons/fa";
-import { MdMonitor, MdOutlineMap } from "react-icons/md";
-import { GlobeIcon } from "@/components/icons";
+import { MdMonitor } from "react-icons/md";
 import { AccountMenu } from "@/components/AccountMenu";
 import { ThemeMenuButton } from "@/components/ThemeToggle";
 
@@ -24,7 +23,14 @@ import { ThemeMenuButton } from "@/components/ThemeToggle";
 // with its own header, and a nav bar over a live call is chrome nobody asked
 // for mid-transmission.
 
-const PRIMARY: any[] = [
+type NavItem = {
+  href: string;
+  label: string;
+  short: string;
+  Icon: React.ComponentType<{ className?: string }>;
+};
+
+const PRIMARY: NavItem[] = [
   // { href: "/rooms", label: "Salas públicas", short: "Salas", Icon: GlobeIcon },
   // { href: "/worldmap", label: "Mapa de salas", short: "Mapa", Icon: MdOutlineMap },
 ];
