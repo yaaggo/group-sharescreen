@@ -1564,7 +1564,13 @@ export function WatchRoom({ handle }: { handle: string }) {
 
   // When kicked from this room by administration
   if (state.roomKickedReason) {
-    return <RoomKickedScreen reason={state.roomKickedReason} />;
+    return (
+      <RoomKickedScreen
+        reason={state.roomKickedReason}
+        initialCooldown={state.roomKickedCooldown ?? 10}
+        handle={handle}
+      />
+    );
   }
 
   // A different guest/account already holds this name in this specific
@@ -4087,18 +4093,15 @@ function RoomBannedScreen({ reason }: { reason: string }) {
   const [seconds, setSeconds] = useState(3);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push("/");
-          return 0;
-        }
-        return prev - 1;
-      });
+    if (seconds <= 0) {
+      router.push("/");
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSeconds((s) => s - 1);
     }, 1000);
-    return () => clearInterval(timer);
-  }, [router]);
+    return () => clearTimeout(timer);
+  }, [seconds, router]);
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
@@ -4128,15 +4131,31 @@ function RoomBannedScreen({ reason }: { reason: string }) {
   );
 }
 
-function RoomKickedScreen({ reason }: { reason: string }) {
+function RoomKickedScreen({
+  reason,
+  initialCooldown = 10,
+  handle,
+}: {
+  reason: string;
+  initialCooldown?: number;
+  handle: string;
+}) {
   const router = useRouter();
+  const [seconds, setSeconds] = useState(initialCooldown);
 
   useEffect(() => {
+    setSeconds(initialCooldown);
+  }, [initialCooldown]);
+
+  useEffect(() => {
+    if (seconds <= 0) return;
     const timer = setTimeout(() => {
-      router.push("/");
-    }, 1200);
+      setSeconds((s) => s - 1);
+    }, 1000);
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [seconds]);
+
+  const canRejoin = seconds <= 0;
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
@@ -4150,17 +4169,33 @@ function RoomKickedScreen({ reason }: { reason: string }) {
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">{reason}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent dark:border-zinc-600 dark:border-t-transparent" />
-          <span>Redirecionando para a página inicial...</span>
+        {!canRejoin ? (
+          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+            <span>Você poderá voltar para a sala em {seconds}s...</span>
+          </div>
+        ) : (
+          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            Você já pode entrar na sala novamente.
+          </p>
+        )}
+        <div className="flex w-full flex-col gap-2 pt-2">
+          <button
+            type="button"
+            disabled={!canRejoin}
+            onClick={() => signalingClient.joinRoom(handle)}
+            className="w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            {canRejoin ? "Entrar na sala novamente" : `Aguarde ${seconds}s para entrar`}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Voltar para o início
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="mt-2 w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-        >
-          Voltar para o início
-        </button>
       </main>
     </div>
   );

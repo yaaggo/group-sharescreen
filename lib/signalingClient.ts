@@ -362,6 +362,7 @@ export type SignalingState = {
   permissionDenied: { permission: RoomPermissionKey; message: string } | null;
   permissionDeniedSeq: number;
   roomKickedReason: string | null;
+  roomKickedCooldown: number | null;
   roomBannedReason: string | null;
   // Ids (PeerInfo.id) of peers currently shown as "typing..." in the chat
   // (see ChatPanel.tsx) — purely a live relay (server/signaling.ts's
@@ -426,6 +427,7 @@ const initialState: SignalingState = {
   permissionDenied: null,
   permissionDeniedSeq: 0,
   roomKickedReason: null,
+  roomKickedCooldown: null,
   roomBannedReason: null,
   typingPeerIds: [],
 };
@@ -785,12 +787,13 @@ class SignalingClient {
       case "join-error": {
         this.desiredRoom = null;
         const msgText = (msg.message as string) ?? "Não foi possível entrar nesta sala.";
+        const kickedCooldown = typeof msg.kickedCooldown === "number" ? msg.kickedCooldown : 10;
         if (msgText.toLowerCase().includes("banido")) {
-          this.setState({ roomBannedReason: msgText, joinError: null, roomKickedReason: null });
-        } else if (msgText.toLowerCase().includes("expulso")) {
-          this.setState({ roomKickedReason: msgText, joinError: null, roomBannedReason: null });
+          this.setState({ roomBannedReason: msgText, joinError: null, roomKickedReason: null, roomKickedCooldown: null });
+        } else if (msgText.toLowerCase().includes("expulso") || typeof msg.kickedCooldown === "number") {
+          this.setState({ roomKickedReason: msgText, roomKickedCooldown: kickedCooldown, joinError: null, roomBannedReason: null });
         } else {
-          this.setState({ joinError: msgText, roomBannedReason: null, roomKickedReason: null });
+          this.setState({ joinError: msgText, roomBannedReason: null, roomKickedReason: null, roomKickedCooldown: null });
         }
         trackEvent("join_error");
         break;
@@ -928,15 +931,18 @@ class SignalingClient {
           roomCategory: typeof msg.category === "string" ? msg.category : null,
         });
         break;
-      case "room-kicked":
+      case "room-kicked": {
         this.desiredRoom = null;
         this.leaveRoom();
+        const cooldown = typeof msg.cooldownSeconds === "number" ? msg.cooldownSeconds : 10;
         this.setState({
           roomKickedReason: (msg.message as string) ?? "Você foi expulso da sala pela administração.",
+          roomKickedCooldown: cooldown,
           joinError: null,
           roomBannedReason: null,
         });
         break;
+      }
       case "room-banned":
         this.desiredRoom = null;
         this.leaveRoom();
