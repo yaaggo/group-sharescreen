@@ -1355,7 +1355,9 @@ export function WatchRoom({ handle }: { handle: string }) {
         maxWidth: "min(64rem, calc(100vw - 3rem))",
         maxHeight: "92dvh",
         data: { initialView: "location", canEdit: true, justCreated: true },
-        onClose: () => setNewRoomPopupOpen(false),
+        onClose: () => {
+          queueMicrotask(() => setNewRoomPopupOpen(false));
+        },
       });
     }, NEW_ROOM_POPUP_DELAY_MS);
     return () => clearTimeout(timer);
