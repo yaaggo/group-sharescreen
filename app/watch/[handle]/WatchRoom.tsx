@@ -4092,16 +4092,21 @@ function RoomBannedScreen({ reason }: { reason: string }) {
   const router = useRouter();
   const [seconds, setSeconds] = useState(3);
 
+  const handleReturnHome = useCallback(() => {
+    signalingClient.leaveRoom();
+    router.push("/");
+  }, [router]);
+
   useEffect(() => {
     if (seconds <= 0) {
-      router.push("/");
+      handleReturnHome();
       return;
     }
     const timer = setTimeout(() => {
       setSeconds((s) => s - 1);
     }, 1000);
     return () => clearTimeout(timer);
-  }, [seconds, router]);
+  }, [seconds, handleReturnHome]);
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
@@ -4121,7 +4126,7 @@ function RoomBannedScreen({ reason }: { reason: string }) {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={handleReturnHome}
           className="mt-2 w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
         >
           Voltar para o início agora

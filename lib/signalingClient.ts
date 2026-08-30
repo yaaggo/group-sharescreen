@@ -812,6 +812,9 @@ class SignalingClient {
           selfId: msg.selfId as string,
           selfUserId: (msg.selfUserId as string | undefined) ?? null,
           joinError: null,
+          roomBannedReason: null,
+          roomKickedReason: null,
+          roomKickedCooldown: null,
           peers: msg.peers as PeerInfo[],
           chatMessages:
             history.length > MAX_CHAT_MESSAGES ? history.slice(-MAX_CHAT_MESSAGES) : history,
@@ -1193,7 +1196,13 @@ class SignalingClient {
     this.desiredName = name;
     this.desiredToken = token !== undefined ? token : this.desiredToken ?? getStoredGuestToken();
     this.reconnectAttempts = 0;
-    this.setState({ nameError: null, joinError: null });
+    this.setState({
+      nameError: null,
+      joinError: null,
+      roomBannedReason: null,
+      roomKickedReason: null,
+      roomKickedCooldown: null,
+    });
     const wasOpen = this.ws && this.ws.readyState === WebSocket.OPEN;
     this.ensureSocket();
     if (wasOpen) {
@@ -1231,7 +1240,12 @@ class SignalingClient {
   joinRoom(room: string) {
     this.desiredRoom = room;
     this.joinRetryCount = 0;
-    this.setState({ joinError: null });
+    this.setState({
+      joinError: null,
+      roomBannedReason: null,
+      roomKickedReason: null,
+      roomKickedCooldown: null,
+    });
     if (this.state.name) void this.performJoin(room);
   }
 
@@ -1293,6 +1307,9 @@ class SignalingClient {
       videoSources: [],
       music: null,
       joinError: null,
+      roomBannedReason: null,
+      roomKickedReason: null,
+      roomKickedCooldown: null,
       // The room's rules leave with the room — carrying them into the next
       // one would gate the wrong controls until its "room-state" lands.
       roomCreated: false,
