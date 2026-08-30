@@ -126,8 +126,10 @@ import {
   MdOutlineChat,
   MdOutlinePeople,
   MdMusicNote,
+  MdPersonRemove,
 } from "react-icons/md";
 import { BsGearFill, BsCoin } from "react-icons/bs";
+import { FaBan } from "react-icons/fa";
 import { BetaMark } from "@/components/BetaMark";
 import { UpdateAppButton } from "@/components/UpdateAppButton";
 
@@ -1553,6 +1555,16 @@ export function WatchRoom({ handle }: { handle: string }) {
         </p>
       </div>
     );
+  }
+
+  // When banned from this room by administration
+  if (state.roomBannedReason) {
+    return <RoomBannedScreen reason={state.roomBannedReason} />;
+  }
+
+  // When kicked from this room by administration
+  if (state.roomKickedReason) {
+    return <RoomKickedScreen reason={state.roomKickedReason} />;
   }
 
   // A different guest/account already holds this name in this specific
@@ -4066,6 +4078,90 @@ export function WatchRoom({ handle }: { handle: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RoomBannedScreen({ reason }: { reason: string }) {
+  const router = useRouter();
+  const [seconds, setSeconds] = useState(3);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          router.push("/");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [router]);
+
+  return (
+    <div className="flex flex-1 items-center justify-center px-4 py-16">
+      <main className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400">
+          <FaBan className="h-6 w-6" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            Acesso bloqueado
+          </h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">{reason}</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent dark:border-zinc-600 dark:border-t-transparent" />
+          <span>Redirecionando para a página inicial em {seconds}s...</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="mt-2 w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          Voltar para o início agora
+        </button>
+      </main>
+    </div>
+  );
+}
+
+function RoomKickedScreen({ reason }: { reason: string }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.push("/");
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [router]);
+
+  return (
+    <div className="flex flex-1 items-center justify-center px-4 py-16">
+      <main className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+          <MdPersonRemove className="h-6 w-6" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            Você foi expulso da sala
+          </h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">{reason}</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent dark:border-zinc-600 dark:border-t-transparent" />
+          <span>Redirecionando para a página inicial...</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="mt-2 w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          Voltar para o início
+        </button>
+      </main>
     </div>
   );
 }

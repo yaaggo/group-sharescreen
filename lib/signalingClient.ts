@@ -361,6 +361,8 @@ export type SignalingState = {
   // started locally before the server had its say.
   permissionDenied: { permission: RoomPermissionKey; message: string } | null;
   permissionDeniedSeq: number;
+  roomKickedReason: string | null;
+  roomBannedReason: string | null;
   // Ids (PeerInfo.id) of peers currently shown as "typing..." in the chat
   // (see ChatPanel.tsx) — purely a live relay (server/signaling.ts's
   // "peer-typing"), nothing persisted or replayed on join. Each entry is
@@ -423,6 +425,8 @@ const initialState: SignalingState = {
   roomCategory: null,
   permissionDenied: null,
   permissionDeniedSeq: 0,
+  roomKickedReason: null,
+  roomBannedReason: null,
   typingPeerIds: [],
 };
 
@@ -778,11 +782,19 @@ class SignalingClient {
       // server/signaling.ts's "join" handler) — surfaced separately from
       // register-error since, unlike that one, our name registration itself
       // was fine; only entering *this* room failed.
-      case "join-error":
+      case "join-error": {
         this.desiredRoom = null;
-        this.setState({ joinError: (msg.message as string) ?? "Não foi possível entrar nesta sala." });
+        const msgText = (msg.message as string) ?? "Não foi possível entrar nesta sala.";
+        if (msgText.toLowerCase().includes("banido")) {
+          this.setState({ roomBannedReason: msgText, joinError: null, roomKickedReason: null });
+        } else if (msgText.toLowerCase().includes("expulso")) {
+          this.setState({ roomKickedReason: msgText, joinError: null, roomBannedReason: null });
+        } else {
+          this.setState({ joinError: msgText, roomBannedReason: null, roomKickedReason: null });
+        }
         trackEvent("join_error");
         break;
+      }
       case "room-state": {
         // The server sends the room's full retained chat history (kept for
         // the room's lifetime — see server/signaling.ts) on every join,
@@ -920,14 +932,18 @@ class SignalingClient {
         this.desiredRoom = null;
         this.leaveRoom();
         this.setState({
-          joinError: (msg.message as string) ?? "Você foi expulso da sala pela administração.",
+          roomKickedReason: (msg.message as string) ?? "Você foi expulso da sala pela administração.",
+          joinError: null,
+          roomBannedReason: null,
         });
         break;
       case "room-banned":
         this.desiredRoom = null;
         this.leaveRoom();
         this.setState({
-          joinError: (msg.message as string) ?? "Você foi banido desta sala pela administração.",
+          roomBannedReason: (msg.message as string) ?? "Você foi banido desta sala pela administração.",
+          joinError: null,
+          roomKickedReason: null,
         });
         break;
       case "room-member-muted":

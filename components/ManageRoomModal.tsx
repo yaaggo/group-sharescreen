@@ -229,33 +229,33 @@ export function ManageRoomModal({
                 setMemberSearch("");
               }}
               aria-label="Voltar"
-              className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
-              <MdArrowBack className="h-5 w-5" />
+              <MdArrowBack className="h-4 w-4" />
             </button>
           )}
           <div className="flex min-w-0 items-center gap-2 truncate">
             {view === "members" ? (
-              <MdPeopleAlt className="h-5 w-5 shrink-0 text-sky-500" />
+              <MdPeopleAlt className="h-4.5 w-4.5 shrink-0 text-zinc-600 dark:text-zinc-300" />
             ) : view === "admins" ? (
-              <FaCrown className="h-4.5 w-4.5 shrink-0 text-amber-500" />
+              <FaCrown className="h-4 w-4 shrink-0 text-amber-500" />
             ) : view === "permissions" ? (
-              <MdSecurity className="h-5 w-5 shrink-0 text-emerald-500" />
+              <MdSecurity className="h-4.5 w-4.5 shrink-0 text-zinc-600 dark:text-zinc-300" />
             ) : celebrating ? (
-              <MdOutlineMap className="h-5 w-5 shrink-0 text-sky-500" />
+              <MdOutlineMap className="h-4.5 w-4.5 shrink-0 text-sky-500" />
             ) : (
-              <BsGearFill className="h-4.5 w-4.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+              <BsGearFill className="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" />
             )}
-            <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+            <h1 className="truncate text-sm font-semibold tracking-tight">{title}</h1>
           </div>
         </div>
         <button
           type="button"
           onClick={() => closePopup(false)}
           aria-label="Fechar"
-          className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-lg leading-none opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
         >
-          <MdClose className="h-5 w-5" />
+          ×
         </button>
       </div>
 
@@ -269,11 +269,11 @@ export function ManageRoomModal({
               setView("members");
               setMembersTab("active");
             }}
-            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-sky-300 hover:bg-sky-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-sky-900/60 dark:hover:bg-sky-950/20"
+            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600 transition group-hover:bg-sky-600 group-hover:text-white dark:bg-sky-950/60 dark:text-sky-400 dark:group-hover:bg-sky-600 dark:group-hover:text-white">
-                <MdPeopleAlt className="h-5 w-5" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition group-hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:group-hover:bg-zinc-700">
+                <MdPeopleAlt className="h-4.5 w-4.5" />
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
@@ -291,7 +291,7 @@ export function ManageRoomModal({
                 </span>
               </div>
             </div>
-            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-sky-600 dark:text-zinc-500 dark:group-hover:text-sky-400" />
+            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-zinc-700 dark:text-zinc-500 dark:group-hover:text-zinc-300" />
           </button>
 
           {/* Gerenciar Administradores Option */}
@@ -299,18 +299,18 @@ export function ManageRoomModal({
             <button
               type="button"
               onClick={() => setView("admins")}
-              className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-amber-300 hover:bg-amber-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-amber-900/60 dark:hover:bg-amber-950/20"
+              className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 transition group-hover:bg-amber-500 group-hover:text-white dark:bg-amber-950/60 dark:text-amber-400 dark:group-hover:bg-amber-500 dark:group-hover:text-white">
-                  <FaCrown className="h-4.5 w-4.5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition group-hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:group-hover:bg-zinc-700">
+                  <FaCrown className="h-4 w-4" />
                 </div>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                       Gerenciar administradores
                     </span>
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                       {state.roomAdmins.length}
                     </span>
                   </div>
@@ -319,7 +319,7 @@ export function ManageRoomModal({
                   </span>
                 </div>
               </div>
-              <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600 dark:text-zinc-500 dark:group-hover:text-amber-400" />
+              <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-zinc-700 dark:text-zinc-500 dark:group-hover:text-zinc-300" />
             </button>
           )}
 
@@ -327,11 +327,11 @@ export function ManageRoomModal({
           <button
             type="button"
             onClick={() => setView("permissions")}
-            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
+            className="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 transition group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-950/60 dark:text-emerald-400 dark:group-hover:bg-emerald-600 dark:group-hover:text-white">
-                <MdSecurity className="h-5 w-5" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition group-hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:group-hover:bg-zinc-700">
+                <MdSecurity className="h-4.5 w-4.5" />
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -342,7 +342,7 @@ export function ManageRoomModal({
                 </span>
               </div>
             </div>
-            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-600 dark:text-zinc-500 dark:group-hover:text-emerald-400" />
+            <MdChevronRight className="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-zinc-700 dark:text-zinc-500 dark:group-hover:text-zinc-300" />
           </button>
 
           {!canManageAdmins && (
@@ -410,7 +410,7 @@ export function ManageRoomModal({
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
               placeholder={membersTab === "active" ? "Buscar participantes..." : "Buscar banidos..."}
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 py-2 pl-9 pr-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 py-2 pl-9 pr-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             />
             {memberSearch && (
               <button
@@ -425,13 +425,13 @@ export function ManageRoomModal({
 
           {/* Ban Confirmation Modal Dialog */}
           {banTarget && (
-            <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/30">
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                <FaBan className="h-4 w-4 shrink-0" />
+            <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                <FaBan className="h-4 w-4 shrink-0 text-red-500" />
                 <h3 className="text-sm font-semibold">Banir {banTarget.name}?</h3>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                Este participante será expulso imediatamente e bloqueado de entrar novamente nesta sala.
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                Este participante será expulso imediatamente e impedido de entrar novamente nesta sala.
               </p>
               <input
                 type="text"
@@ -439,7 +439,7 @@ export function ManageRoomModal({
                 value={banReason}
                 onChange={(e) => setBanReason(e.target.value)}
                 placeholder="Motivo do banimento (opcional)"
-                className="w-full rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -455,7 +455,7 @@ export function ManageRoomModal({
                 <button
                   type="button"
                   onClick={handleConfirmBan}
-                  className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500"
+                  className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-red-500"
                 >
                   Confirmar Banimento
                 </button>
@@ -465,13 +465,13 @@ export function ManageRoomModal({
 
           {/* Kick Confirmation Modal Dialog */}
           {kickTarget && (
-            <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
-              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                <MdPersonRemove className="h-5 w-5 shrink-0" />
+            <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                <MdPersonRemove className="h-4.5 w-4.5 shrink-0 text-amber-500" />
                 <h3 className="text-sm font-semibold">Expulsar {kickTarget.name}?</h3>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                O participante sairá da sala atual, mas poderá retornar quando desejar.
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                O participante será removido da sala atual, mas poderá retornar quando desejar.
               </p>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -484,7 +484,7 @@ export function ManageRoomModal({
                 <button
                   type="button"
                   onClick={handleConfirmKick}
-                  className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+                  className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-amber-500"
                 >
                   Confirmar Expulsão
                 </button>
@@ -505,7 +505,7 @@ export function ManageRoomModal({
                   </p>
                 </div>
               ) : (
-                <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-0.5">
+                <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-0.5">
                   {filteredPeers.map((peer) => {
                     const peerIsAdmin = state.roomAdmins.some((a) => a.id === peer.userId);
                     const peerIsOwner = peer.userId === state.roomOwnerId;
@@ -515,7 +515,7 @@ export function ManageRoomModal({
                     return (
                       <li
                         key={peer.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-2.5 transition dark:border-zinc-800/80 dark:bg-zinc-900/40"
+                        className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900/40"
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <DisplayUserName
@@ -540,7 +540,7 @@ export function ManageRoomModal({
                             )
                           )}
                           {isMuted && (
-                            <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 dark:bg-red-950/70 dark:text-red-400">
+                            <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-950/70 dark:text-red-400">
                               Mudo
                             </span>
                           )}
@@ -563,7 +563,7 @@ export function ManageRoomModal({
                                     : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                                 }`}
                               >
-                                {isMuted ? <MdMicOff className="h-4 w-4" /> : <MdMic className="h-4 w-4" />}
+                                {isMuted ? <MdMicOff className="h-3.5 w-3.5" /> : <MdMic className="h-3.5 w-3.5" />}
                               </button>
                             </Tooltip>
 
@@ -576,9 +576,9 @@ export function ManageRoomModal({
                                     setKickTarget({ userId: peer.userId, name: peer.name });
                                   }
                                 }}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-200 text-amber-600 transition hover:bg-amber-50 hover:text-amber-700 dark:border-amber-900/70 dark:text-amber-400 dark:hover:bg-amber-950/60"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-amber-900/60 dark:hover:bg-amber-950/40 dark:hover:text-amber-400"
                               >
-                                <MdPersonRemove className="h-4 w-4" />
+                                <MdPersonRemove className="h-3.5 w-3.5" />
                               </button>
                             </Tooltip>
 
@@ -592,9 +592,9 @@ export function ManageRoomModal({
                                     setBanReason("");
                                   }
                                 }}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:border-red-900/70 dark:text-red-400 dark:hover:bg-red-950/60"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-red-900/60 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                               >
-                                <MdBlock className="h-4 w-4" />
+                                <MdBlock className="h-3.5 w-3.5" />
                               </button>
                             </Tooltip>
                           </div>
@@ -622,14 +622,14 @@ export function ManageRoomModal({
                   </p>
                 </div>
               ) : (
-                <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-0.5">
+                <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-0.5">
                   {filteredBannedMembers.map((banned) => (
                     <li
                       key={banned.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-red-200/60 bg-red-50/20 p-2.5 transition dark:border-red-900/40 dark:bg-red-950/10"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900/40"
                     >
                       <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                        <span className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-100">
                           {banned.name}
                         </span>
                         <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -645,7 +645,7 @@ export function ManageRoomModal({
                       <button
                         type="button"
                         onClick={() => signalingClient.unbanRoomMember(banned.id)}
-                        className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/80"
+                        className="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                       >
                         <MdOutlineCheckCircle className="h-3.5 w-3.5" />
                         Desbanir
@@ -678,7 +678,7 @@ export function ManageRoomModal({
                   return (
                     <li
                       key={admin.id}
-                      className="flex items-center justify-between gap-2 rounded-xl bg-zinc-50 p-2.5 text-xs dark:bg-zinc-900/50"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-900/40"
                     >
                       <span className="flex min-w-0 items-center gap-1.5">
                         <FaCrown className="h-3 w-3 shrink-0 text-amber-500" />
@@ -723,7 +723,7 @@ export function ManageRoomModal({
                   return (
                     <li
                       key={peer.id}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-2.5 text-xs dark:border-zinc-800/80 dark:bg-zinc-900/40"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-900/40"
                     >
                       <DisplayUserName
                         name={peer.name}
@@ -735,7 +735,7 @@ export function ManageRoomModal({
                         type="button"
                         disabled={alreadyAdmin}
                         onClick={() => signalingClient.addRoomAdmin(peer.userId)}
-                        className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                        className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                       >
                         {alreadyAdmin ? "Já é admin" : "Tornar admin"}
                       </button>
@@ -835,7 +835,7 @@ export function ManageRoomModal({
                   signalingClient.setRoomLocation(pick);
                   if (celebrating) closePopup(true);
                 }}
-                className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-lg bg-zinc-950 px-4 py-2 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
                 {saved ? "Salvar novo local" : "Salvar local"}
               </button>
@@ -843,7 +843,7 @@ export function ManageRoomModal({
                 <button
                   type="button"
                   onClick={() => closePopup(false)}
-                  className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
                   Agora não
                 </button>
@@ -855,7 +855,7 @@ export function ManageRoomModal({
                     signalingClient.setRoomLocation(null);
                     setPick(null);
                   }}
-                  className="rounded-xl border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                  className="rounded-lg border border-red-300 px-4 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
                 >
                   Remover do mapa
                 </button>
@@ -882,13 +882,13 @@ export function ManageRoomModal({
                     disabled={!isManager}
                     onClick={() => signalingClient.setRoomPermission(key, !allowed)}
                     aria-pressed={allowed}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/40 px-3.5 py-3 text-left text-xs font-medium transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:bg-zinc-900"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-left text-xs font-medium transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:bg-zinc-900"
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
                       <Icon
                         className={`h-4.5 w-4.5 shrink-0 ${
                           allowed
-                            ? "text-emerald-600 dark:text-emerald-400"
+                            ? "text-zinc-900 dark:text-zinc-100"
                             : "text-zinc-400 dark:text-zinc-600"
                         }`}
                       />
@@ -896,13 +896,15 @@ export function ManageRoomModal({
                     </span>
                     <span
                       className={`relative h-5 w-9 shrink-0 rounded-full transition ${
-                        allowed ? "bg-emerald-600" : "bg-zinc-300 dark:bg-zinc-700"
+                        allowed ? "bg-zinc-950 dark:bg-zinc-50" : "bg-zinc-300 dark:bg-zinc-700"
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${
-                          allowed ? "left-[1.125rem]" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
+                          allowed
+                            ? "left-[1.125rem] bg-white dark:bg-zinc-950"
+                            : "left-0.5 bg-white dark:bg-zinc-300"
+                        } shadow-sm`}
                       />
                     </span>
                   </button>
