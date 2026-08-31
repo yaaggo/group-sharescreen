@@ -1459,12 +1459,12 @@ class SignalingClient {
     this.kickMember(userId);
   }
 
-  banMember(userId: string) {
-    this.rawSend({ type: "room-ban", userId });
+  banMember(userId: string, name?: string, reason?: string) {
+    this.rawSend({ type: "room-ban", userId, name, reason });
   }
 
-  banRoomMember(userId: string) {
-    this.banMember(userId);
+  banRoomMember(userId: string, name?: string, reason?: string) {
+    this.banMember(userId, name, reason);
   }
 
   unbanMember(userId: string) {
